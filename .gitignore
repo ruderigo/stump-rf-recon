@@ -1,0 +1,17 @@
+# PlatformIO / Firmware
+.pio/
+firmware/.pio/
+*.bin
+*.elf
+*.hex
+
+# Python / Host
+__pycache__/
+*.py[cod]
+*$py.class
+*.jsonl
+
+# System & IDE
+.DS_Store
+.vscode/
+venv/
