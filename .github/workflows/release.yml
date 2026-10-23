@@ -1,0 +1,54 @@
+name: Release Artifacts
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Publish Release Assets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      - name: Build Firmware Binary
+        working-directory: ./firmware
+        run: |
+          pio run
+          # Find and stage the compiled firmware binary
+          mkdir -p ../dist
+          find .pio/build -name "firmware.bin" -exec cp {} ../dist/heltec-v3-firmware.bin \;
+
+      - name: Package Host Suite for R36MAX
+        run: |
+          mkdir -p dist
+          # Create standalone host packages
+          cd host
+          tar -czf ../dist/stump-rf-recon-r36max-arm64.tar.gz *
+          zip -r ../dist/stump-rf-recon-r36max.zip *
+          cd ..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/heltec-v3-firmware.bin
+            dist/stump-rf-recon-r36max-arm64.tar.gz
+            dist/stump-rf-recon-r36max.zip
+          generate_release_notes: true
