@@ -4,7 +4,6 @@ A passive, receive-only (**Sub-GHz LoRa 902–928 MHz** + **2.4 GHz 802.11b/g/n*
 
 <img width="630" height="750" alt="demo1" src="https://github.com/user-attachments/assets/3fe26296-2f89-4d70-8dfc-f233b778c94d" />
 
-
 ---
 
 ## 1. What It Can Sniff (Receive-Only Capture Scope)
@@ -68,7 +67,66 @@ Pressing **`[X]` or `[Y]`** in `3:DISSECTOR` or `5:CONSOLE` on the R36MAX (or cl
 
 ---
 
-## 4. Hardware & Architectural Ceiling (What This Tool Does NOT Do)
+## 4. Installation & Flashing Guide (R36MAX + Heltec V3)
+
+### Step 1: Download the Packages
+From the **R36MAX Handheld HUD** tab in the Web Console:
+- Click **`Download stump-recon-r36max.zip`** (contains `STUMP-Recon.sh`, `stump-recon/stump_gui.py`, `stump-recon/stump_cli.py`, `stump-recon/validate_recon.py`, and `stump-recon/README.md`).
+- Click **`Download heltec-v3-firmware.zip`** if you need to flash a Heltec V3 board (contains `platformio.ini` and `src/main.cpp`).
+
+### Step 2: Deploy to the XiFan R36MAX
+
+#### Option A: Over Wi-Fi (`scp` + `ssh`)
+Run this single block in your Mac/Linux Terminal (it automatically selects the newest `stump-recon-r36max*.zip` in `~/Downloads`, even if macOS appended `(1)` or `(2)`):
+
+```bash
+LATEST_R36_ZIP="$(ls -t ~/Downloads/stump-recon-r36max*.zip | head -n 1)" && \
+echo "Uploading: $LATEST_R36_ZIP" && \
+scp "$LATEST_R36_ZIP" ark@r36max.local:/roms/ports/stump-recon-r36max.zip && \
+ssh ark@r36max.local "cd /roms/ports && rm -rf STUMP* stump-recon && unzip -o stump-recon-r36max.zip && chmod +x STUMP-Recon.sh stump-recon/*.py && python3 stump-recon/validate_recon.py stump-recon/stump_gui.py"
+```
+*(Default ArkOS SSH password is `ark`. Replace `r36max.local` with the handheld's IP address if mDNS is disabled).*
+
+#### Option B: Direct MicroSD Card Copy (`EASYROMS`)
+If the R36MAX MicroSD card is mounted on your Mac at `/Volumes/EASYROMS`:
+
+```bash
+LATEST_R36_ZIP="$(ls -t ~/Downloads/stump-recon-r36max*.zip | head -n 1)" && \
+cd /Volumes/EASYROMS/ports && \
+rm -rf STUMP* stump-recon && \
+unzip -o "$LATEST_R36_ZIP" && \
+dot_clean -m /Volumes/EASYROMS/ports
+```
+
+### Step 3: Flash the Heltec WiFi LoRa 32 V3 Firmware (`v0.3.7-DUALBAND-TDM`)
+Plug the Heltec V3 into your computer via USB-C and run:
+
+```bash
+export PATH="$HOME/.platformio/penv/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" && \
+rm -rf ~/Downloads/heltec-v3-latest && \
+unzip -o "$(ls -t ~/Downloads/heltec-v3-firmware*.zip | head -n 1)" -d ~/Downloads/heltec-v3-latest && \
+cd ~/Downloads/heltec-v3-latest && \
+pio run -t upload
+```
+*(If PlatformIO CLI is not installed yet, run `brew install platformio` on macOS first. If a board is stuck in RNode/deep-sleep mode and not enumerating, hold **`PRG / BOOT`** while plugging in USB-C, tap **`RST`**, then run `pio run -t upload`).*
+
+### Step 4: Launch & Controls Reference
+Plug the flashed Heltec V3 into the R36MAX **`OTG`** USB-C port and launch **`Ports` $\rightarrow$ `STUMP-Recon`**.
+
+| Control (R36MAX / Keyboard) | Action |
+| :--- | :--- |
+| **`L1 / R1`** (`TAB`) | Cycle across the 5 views (`SPECTRUM`, `DEVICES`, `DISSECTOR`, `TUNER`, `CONSOLE`) |
+| **`D-Pad`** (`Arrow Keys`) | Navigate device cards (`DEVICES`), lock frame cursor (`DISSECTOR`), or tune radio (`TUNER`) |
+| **`A`** (`Enter`) | Open/Close Device Confirmation Dossier Pop-up (`DEVICES`) or engage `SNIFF` mode |
+| **`B`** (`Backspace`) | Close Pop-up / Purge stale Wi-Fi ghosts (`DEVICES`) or engage `SWEEP` mode |
+| **`X`** (`X`) | Cycle Card Refresh Rate (`DEVICES`), Export `.pcap/.chlsj/.json` (`DISSECTOR`/`CONSOLE`), or `SCAN` |
+| **`Y`** (`Y`) | Cycle Card Sort Mode (`DEVICES`), Export `.pcap/.chlsj/.json` (`DISSECTOR`/`CONSOLE`), or Toggle Sync |
+| **`START`** (`Space`) | Pause / Resume live UI telemetry stream |
+| **`SELECT`** (`Esc` / `Q`) | Close pop-up or exit cleanly to EmulationStation |
+
+---
+
+## 5. Hardware & Architectural Ceiling (What This Tool Does NOT Do)
 
 To avoid overstating what an ESP32-S3 + SX1262 can physically deliver:
 
@@ -83,7 +141,7 @@ To avoid overstating what an ESP32-S3 + SX1262 can physically deliver:
 
 ---
 
-## 5. Validation Methodology: Known-Transmitter & LAA Clustering
+## 6. Validation Methodology: Known-Transmitter & LAA Clustering
 
 ### How `Ferr` (Crystal Frequency Error) & Identity Clustering Works
 In `stump_gui.py` (`match_physical_lora_device`) and `DeviceRadarPanel.tsx` (`buildLiveDeviceMap`), incoming LoRa packets are grouped into physical transmitter cards using a two-stage gate:
@@ -98,13 +156,17 @@ In `stump_gui.py` (`match_physical_lora_device`) and `DeviceRadarPanel.tsx` (`bu
 ### Running the Ground-Truth Bench Validation Suite (`validate_recon.py`)
 An automated validation suite (`stump-recon/validate_recon.py`) parses and executes `stump_gui.py`'s actual `dissect_lora()`, `match_physical_lora_device()`, and `update_device_registry()` functions against 5 controlled transmitter scenarios:
 
+```bash
+python3 /roms/ports/stump-recon/validate_recon.py /roms/ports/stump-recon/stump_gui.py
+```
+
 | Test ID | Ground-Truth Scenario | Input Stream | Expected Output |
 | :--- | :--- | :--- | :--- |
 | **Test 1** | **Same Node, 3 Different Payloads** | Node A (`Ferr ≈ -310 Hz`, `-54 dBm`) sends `Sideband ANNOUNCE` (`9a4c...`), `NomadNet ANNOUNCE` (`7788...`), and encrypted `DATA` (`aabb...`) | **1 Cluster** (`pkts=3`, `ferr_avg=-310.2 Hz`, all hashes attached to `rns_dests`) |
-| **Test 2** | **Two Side-by-Side Nodes, Same Payload (`DATA`)** | Node A (`Ferr = -310 Hz`, `-54 dBm`) and Node B (`Ferr = +145 Hz`, `-54 dBm`) both send raw `DATA` frames at identical RSSI | **2 Distinct Clusters** (separated by `|ΔFerr| = 455 Hz > 250 Hz`) |
-| **Test 3** | **Two Side-by-Side Nodes with Overlapping Crystals (`|ΔFerr| = 100 Hz`), Same Aspect** | Node A (`-310 Hz`) and Node C (`-210 Hz`) both send `Sideband / LXMF` `ANNOUNCE` frames with different `dest_hash` | **2 Distinct Clusters** (Stage 1 blocks merge because a single RNS identity cannot have two `lxmf.delivery` hashes) |
+| **Test 2** | **Two Side-by-Side Nodes, Same Payload (`DATA`)** | Node A (`Ferr = -310 Hz`, `-54 dBm`) and Node B (`Ferr = +145 Hz`, `-54 dBm`) both send raw `DATA` frames at identical RSSI | **2 Distinct Clusters** (separated by `\|ΔFerr\| = 455 Hz > 250 Hz`) |
+| **Test 3** | **Two Side-by-Side Nodes with Overlapping Crystals (`\|ΔFerr\| = 100 Hz`), Same Aspect** | Node A (`-310 Hz`) and Node C (`-210 Hz`) both send `Sideband / LXMF` `ANNOUNCE` frames with different `dest_hash` | **2 Distinct Clusters** (Stage 1 blocks merge because a single RNS identity cannot have two `lxmf.delivery` hashes) |
 | **Test 4** | **MeshCore `0x12` vs. Reticulum `0x12` Coexistence** | MeshCore `ADVERT` (`0x11`, Repeater + GPS) and Reticulum `ANNOUNCE` (`0x01`, Sideband) at same `Ferr` and `RSSI` | **2 Distinct Clusters** (`MC "MC-Repeater-NW"` vs `RNS "Operator-1"`) |
-| **Test 5** | **Known False-Merge Boundary** | Two unannounced `DATA`-only transmitters at `-70 dBm` whose crystals lie within `|ΔFerr| = 90 Hz <= 250 Hz` | **Merges into 1 Cluster** until at least one node transmits an `ANNOUNCE` / `ADVERT` |
+| **Test 5** | **Known False-Merge Boundary** | Two unannounced `DATA`-only transmitters at `-70 dBm` whose crystals lie within `\|ΔFerr\| = 90 Hz <= 250 Hz` | **Merges into 1 Cluster** until at least one node transmits an `ANNOUNCE` / `ADVERT` |
 
 ### Documented Failure Modes & False-Merge Boundaries
 - **TCXO Collision on Unannounced `DATA`-Only Nodes**: Temperature-Compensated Crystal Oscillators (TCXOs) on two Heltec V3 boards from the same manufacturing reel can occasionally sit within `< 200 Hz` (`< 0.22 ppm` at 915 MHz) of each other. If both boards sit at the same distance (`|ΔRSSI| <= 10 dB`) and *only* transmit encrypted `DATA` frames (never an `ANNOUNCE` or `ADVERT`), Stage 2 will merge them into a single physical cluster. Separating them requires moving the receiver antenna close (`5–10 cm`) to one board so `|ΔRSSI| > 10 dB`, or capturing an `ANNOUNCE` frame.
